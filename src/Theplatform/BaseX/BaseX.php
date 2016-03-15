@@ -7,26 +7,37 @@ use Httpful;
 
 class BaseX
 {
-	private $baseXConf = config('baseX.baseX');
+    private $baseXConf;
 
-	/**
+    /**
+     * Construct.
+     */
+    public function __construct()
+    {
+        $this->baseXConf = config('baseX.baseX');
+    }
+
+    /**
      * Creates a BaseX database with the provided content.
      *
      * @param String $databaseTitle
      * @param String $content
      * @param String[] $options
      */
-    static public function createDatabase($databaseTitle, $content, $options = [])
+    public function createDatabase($databaseTitle, $content, $options = [])
     {
-    	// Construct the URL.
-        $url = $basexConf['basePath'].$dbTitle.$basexConf['options'];
+        // BaseX doesn't like periods
+        $databaseTitle = str_replace(".", "", $databaseTitle);
+
+        // Construct the URL.
+        $url = $this->baseXConf['basePath'].$databaseTitle.$this->baseXConf['options'];
 
         try {
 
             // Construct the POST request.
             $response = Httpful\Request::put($url)
                 ->sendsXml()
-                ->authenticateWith($basexConf['user'], $basexConf['password'])
+                ->authenticateWith($this->baseXConf['user'], $this->baseXConf['password'])
                 ->body($content)
                 ->send();
 
@@ -35,7 +46,7 @@ class BaseX
             } 
             
         } catch (Exception $e) {
-            throw new Exception("Exception creating BaseX database: ".$e->getMessage(), $e->code);
+            throw new Exception("Exception creating BaseX database: ".$e->getMessage(), 503);
             
         }
     }
@@ -48,44 +59,52 @@ class BaseX
      * 
      * @return SimpleXMLElement
      */
-    static public function queryDatabase($databaseTitle, $query)
+    public function queryDatabase($databaseTitle, $query)
     {
-    	$url = $baseXConf['basePath'].$databaseTitle."?query=".urlencode($query);
-    	$baseXResponse = Httpful\Request::get($url)
-    		->authenticateWith($baseXConf['user'], $baseXConf['password'])
-    		->parseWith(function($body) {
-    			return "<xml>".$body."</xml>";
-    		})
-    		->send();
+        // BaseX doesn't like periods
+        $databaseTitle = str_replace(".", "", $databaseTitle);
+
+        $url = $this->baseXConf['basePath'].$databaseTitle;
+        $baseXResponse = Httpful\Request::post($url)
+            ->body('<query xmlns="http://basex.org/rest"><text><![CDATA['.$query.']]></text></query>')
+            ->sendsXml()
+            ->authenticateWith($this->baseXConf['user'], $this->baseXConf['password'])
+            ->parseWith(function($body) {
+                return "<xml>".$body."</xml>";
+            })
+            ->send();
 
         // Were we successful?
-    	if ($baseXResponse->code > 200) {
-    		throw new Exception("Exception during BaseX query: ".$baseXResponse->raw_body, $baseXResponse->code);
-    		
-    	}
+        if ($baseXResponse->code > 200) {
+            throw new Exception("Exception during BaseX query: ".$url."\n".$baseXResponse->raw_body, $baseXResponse->code);
+            
+        }
 
         return $baseXResponse->body;
     }
 
-	/**
+    /**
      * Drops a BaseX database.
      * 
      * @param String $databaseTitle
      */
-    static public function dropDatabase($databaseTitle)
+    public function dropDatabase($databaseTitle)
     {
+        // BaseX doesn't like periods
+        $databaseTitle = str_replace(".", "", $databaseTitle);
+
         // Construct the URL.
-        $url = $basexConf['basePath'].$databaseTitle;
+        $url = $this->baseXConf['basePath'].$databaseTitle;
 
         // Send delete request. 
-        $respnse = Httpful\Request::delete($url)
-            ->authenticateWith($basexConf['user'], $basexConf['password'])
+        $response = Httpful\Request::delete($url)
+            ->authenticateWith($this->baseXConf['user'], $this->baseXConf['password'])
             ->send();
 
         // Check the status
         if ($response->code != 200) {
-        	// Throw an exception
-        	throw new Exception("Exception deleting BaseX database. Received BaseX response: ".$response->raw_body, $response->code);
+            // Throw an exception
+            throw new Exception("Exception deleting BaseX database. Received BaseX response: ".$response->raw_body, $response->code);
         }
     }
 }
