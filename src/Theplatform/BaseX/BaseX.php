@@ -80,7 +80,7 @@ class BaseX
             
         }
 
-        return $baseXResponse->body;
+        return simplexml_load_string($baseXResponse->body);
     }
 
     /**
